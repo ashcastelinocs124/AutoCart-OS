@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useMarketplace } from '@/hooks/useMarketplace'
 import { useWallet } from '@/hooks/useWallet'
 import { AgentCard } from '@/components/AgentCard'
@@ -13,13 +13,10 @@ export default function Dashboard() {
   const { agents, agreements, connected } = useMarketplace()
   const wallet = useWallet()
   const [modalOpen, setModalOpen] = useState(false)
+  const closeModal = useCallback(() => setModalOpen(false), [])
 
   function openModal() {
-    if (!wallet.account) {
-      wallet.connect().then(() => setModalOpen(true))
-    } else {
-      setModalOpen(true)
-    }
+    setModalOpen(true)
   }
 
   return (
@@ -91,7 +88,7 @@ export default function Dashboard() {
       {/* Modal */}
       <RegisterModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         wallet={wallet}
       />
     </main>
