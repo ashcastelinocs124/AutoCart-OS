@@ -25,8 +25,9 @@ export function useMarketplace() {
         provider = new ethers.WebSocketProvider(wsUrl)
         contract = new ethers.Contract(contractAddress, ABI, provider)
 
-        provider.websocket.addEventListener('open', () => setConnected(true))
-        provider.websocket.addEventListener('close', () => {
+        const ws = provider.websocket as unknown as WebSocket
+        ws.addEventListener('open', () => setConnected(true))
+        ws.addEventListener('close', () => {
           setConnected(false)
           reconnectTimer = setTimeout(connect, 5000)
         })
