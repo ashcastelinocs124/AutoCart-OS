@@ -51,7 +51,7 @@ def run(task_description: str):
         "gasPrice": w3.to_wei("1", "gwei"),
     })
     signed = buyer_account.sign_transaction(tx)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
     # Extract agreementHash from event
@@ -93,9 +93,9 @@ def run(task_description: str):
     tx = fn.build_transaction({
         "from": buyer_account.address,
         "nonce": nonce,
-        "gas": 100000,
+        "gas": 300000,
         "gasPrice": w3.to_wei("1", "gwei"),
     })
     signed = buyer_account.sign_transaction(tx)
-    w3.eth.send_raw_transaction(signed.raw_transaction)
+    w3.eth.send_raw_transaction(signed.rawTransaction)
     print(f"\n[Buyer] {action} submitted on-chain. Done.")

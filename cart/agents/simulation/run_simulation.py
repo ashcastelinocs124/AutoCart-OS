@@ -71,7 +71,7 @@ def register_sellers():
             "gasPrice": w3.to_wei("1", "gwei"),
         })
         signed = account.sign_transaction(tx)
-        w3.eth.send_raw_transaction(signed.raw_transaction)
+        w3.eth.send_raw_transaction(signed.rawTransaction)
         print(f"  Registered: {s['name']} at {account.address[:10]}…")
         time.sleep(0.5)
     print()

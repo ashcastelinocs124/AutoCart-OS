@@ -33,7 +33,7 @@ def _cosine(a, b) -> float:
 
 def index_registered_agents():
     """Pull all AgentRegistered events and build the local index."""
-    events = contract.events.AgentRegistered.get_logs(from_block=0)
+    events = contract.events.AgentRegistered.get_logs(fromBlock=0)
     for e in events:
         addr = e["args"]["wallet"]
         agent = contract.functions.agents(addr).call()
