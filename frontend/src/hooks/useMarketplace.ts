@@ -25,6 +25,7 @@ export function useMarketplace() {
         provider = new ethers.WebSocketProvider(wsUrl)
         contract = new ethers.Contract(contractAddress, ABI, provider)
 
+        // ethers v6 types websocket as WebSocketLike; cast is safe in browser context
         const ws = provider.websocket as unknown as WebSocket
         ws.addEventListener('open', () => setConnected(true))
         ws.addEventListener('close', () => {
@@ -42,7 +43,7 @@ export function useMarketplace() {
           agentMap[addr] = {
             address: addr,
             name: raw.name,
-            capabilities: (raw.capabilities as string).split(',').map((s) => s.trim()),
+            capabilities: (raw.capabilities as string).split(',').map((s) => s.trim()).filter(Boolean),
             priceEth: ethers.formatEther(raw.priceWei),
             reputation: Number(raw.reputation),
           }
@@ -63,7 +64,7 @@ export function useMarketplace() {
             sellerName: agentMap[raw.seller]?.name ?? raw.seller.slice(0, 8) + '…',
             taskDescription: raw.taskDescription,
             amountEth: ethers.formatEther(raw.amountEscrowed),
-            status: STATUS_MAP[Number(raw.status)],
+            status: STATUS_MAP[Number(raw.status)] ?? 'PENDING',
             createdAt: Number(raw.createdAt),
           }
         }
@@ -77,7 +78,7 @@ export function useMarketplace() {
             [wallet]: {
               address: wallet,
               name: raw.name,
-              capabilities: (raw.capabilities as string).split(',').map((s: string) => s.trim()),
+              capabilities: (raw.capabilities as string).split(',').map((s: string) => s.trim()).filter(Boolean),
               priceEth: ethers.formatEther(raw.priceWei),
               reputation: Number(raw.reputation),
             },
