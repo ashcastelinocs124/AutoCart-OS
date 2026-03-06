@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ethers } from 'ethers'
 import ABI from '@/lib/abi'
 import type { Agent, Agreement, AgentStatus } from '@/types/marketplace'
@@ -11,31 +11,60 @@ export function useMarketplace() {
   const [agents, setAgents] = useState<Record<string, Agent>>({})
   const [agreements, setAgreements] = useState<Record<string, Agreement>>({})
   const [connected, setConnected] = useState(false)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const providerRef = useRef<ethers.WebSocketProvider | null>(null)
+  const contractRef = useRef<ethers.Contract | null>(null)
+  const reconnectingRef = useRef(false)
 
   useEffect(() => {
     const wsUrl = process.env.NEXT_PUBLIC_RPC_WS_URL!
     const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!
+    let mounted = true
 
-    let provider: ethers.WebSocketProvider
-    let contract: ethers.Contract
-    let reconnectTimer: ReturnType<typeof setTimeout>
+    function cleanupConnection() {
+      contractRef.current?.removeAllListeners?.()
+      providerRef.current?.destroy?.()
+      contractRef.current = null
+      providerRef.current = null
+      reconnectingRef.current = false
+    }
+
+    function scheduleReconnect() {
+      if (!mounted || reconnectTimerRef.current || reconnectingRef.current) return
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        void connect()
+      }, 5000)
+    }
 
     async function connect() {
+      if (!mounted || reconnectingRef.current || providerRef.current) return
+      reconnectingRef.current = true
+
       try {
-        provider = new ethers.WebSocketProvider(wsUrl)
-        contract = new ethers.Contract(contractAddress, ABI, provider)
+        const provider = new ethers.WebSocketProvider(wsUrl)
+        const contract = new ethers.Contract(contractAddress, ABI, provider)
+        providerRef.current = provider
+        contractRef.current = contract
 
         // ethers v6 types websocket as WebSocketLike; cast is safe in browser context
         const ws = provider.websocket as unknown as WebSocket
-        ws.addEventListener('open', () => setConnected(true))
+        ws.addEventListener('open', () => {
+          if (!mounted) return
+          setConnected(true)
+          reconnectingRef.current = false
+        })
         ws.addEventListener('close', () => {
+          cleanupConnection()
+          if (!mounted) return
           setConnected(false)
-          reconnectTimer = setTimeout(connect, 5000)
+          scheduleReconnect()
         })
 
         // Backfill agents
         const agentMap: Record<string, Agent> = {}
         const agentEvents = await contract.queryFilter(contract.filters.AgentRegistered())
+        if (!mounted || contractRef.current !== contract) return
         for (const e of agentEvents) {
           const log = e as ethers.EventLog
           const addr: string = log.args.wallet
@@ -48,11 +77,13 @@ export function useMarketplace() {
             reputation: Number(raw.reputation),
           }
         }
+        if (!mounted || contractRef.current !== contract) return
         setAgents(agentMap)
 
         // Backfill agreements
         const agreementMap: Record<string, Agreement> = {}
         const agreementEvents = await contract.queryFilter(contract.filters.AgreementCreated())
+        if (!mounted || contractRef.current !== contract) return
         for (const e of agreementEvents) {
           const log = e as ethers.EventLog
           const hash: string = log.args.agreementHash
@@ -68,11 +99,14 @@ export function useMarketplace() {
             createdAt: Number(raw.createdAt),
           }
         }
+        if (!mounted || contractRef.current !== contract) return
         setAgreements(agreementMap)
 
         // Live subscriptions
         contract.on('AgentRegistered', async (wallet: string) => {
+          if (!mounted || contractRef.current !== contract) return
           const raw = await contract.agents(wallet)
+          if (!mounted || contractRef.current !== contract) return
           setAgents((prev) => ({
             ...prev,
             [wallet]: {
@@ -86,7 +120,9 @@ export function useMarketplace() {
         })
 
         contract.on('AgreementCreated', async (hash: string, buyer: string, seller: string) => {
+          if (!mounted || contractRef.current !== contract) return
           const raw = await contract.agreements(hash)
+          if (!mounted || contractRef.current !== contract) return
           setAgents((prevAgents) => {
             setAgreements((prev) => ({
               ...prev,
@@ -106,34 +142,43 @@ export function useMarketplace() {
         })
 
         contract.on('AgreementCompleted', (hash: string) => {
+          if (!mounted || contractRef.current !== contract) return
           setAgreements((prev) =>
             prev[hash] ? { ...prev, [hash]: { ...prev[hash], status: 'COMPLETED' } } : prev
           )
         })
 
         contract.on('AgreementDisputed', (hash: string) => {
+          if (!mounted || contractRef.current !== contract) return
           setAgreements((prev) =>
             prev[hash] ? { ...prev, [hash]: { ...prev[hash], status: 'DISPUTED' } } : prev
           )
         })
 
         contract.on('AgreementExpired', (hash: string) => {
+          if (!mounted || contractRef.current !== contract) return
           setAgreements((prev) =>
             prev[hash] ? { ...prev, [hash]: { ...prev[hash], status: 'EXPIRED' } } : prev
           )
         })
       } catch (err) {
+        cleanupConnection()
+        if (!mounted) return
+        setConnected(false)
         console.error('[useMarketplace] connect error:', err)
-        reconnectTimer = setTimeout(connect, 5000)
+        scheduleReconnect()
       }
     }
 
-    connect()
+    void connect()
 
     return () => {
-      clearTimeout(reconnectTimer)
-      contract?.removeAllListeners?.()
-      provider?.destroy?.()
+      mounted = false
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      cleanupConnection()
     }
   }, [])
 
